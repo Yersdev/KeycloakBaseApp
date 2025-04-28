@@ -1,0 +1,132 @@
+package yers.dev.keycloak.service;
+
+import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Сервис для аутентификации через OpenID Connect
+ */
+@Service
+@RequiredArgsConstructor
+public class KeycloakUserService {
+    private final WebClient.Builder webClientBuilder;
+
+    @Value("${keycloak.auth-server-url}")      private String keycloakUrl;
+    @Value("${keycloak.realm}")                private String realm;
+    @Value("${keycloak.admin.client-id}")      private String adminClientId;
+    @Value("${keycloak.admin.client-secret}")  private String adminClientSecret;
+
+    private WebClient tokenClient() {
+        return webClientBuilder
+                .baseUrl(keycloakUrl + "/realms/" + realm + "/protocol/openid-connect")
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+                .build();
+    }
+
+    public String getAdminAccessToken() {
+        MultiValueMap<String,String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type",    "client_credentials");
+        form.add("client_id",     adminClientId);
+        form.add("client_secret", adminClientSecret);
+
+        Map<String,Object> resp = tokenClient().post()
+                .uri("/token")
+                .body(BodyInserters.fromFormData(form))
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String,Object>>(){})
+                .block();
+
+        return Objects.requireNonNull((String) resp.get("access_token"),
+                "Админ-токен не был получен");
+    }
+
+    public void registerUserWithRole(String username,
+                                     String email,
+                                     String firstName,
+                                     String lastName,
+                                     String rawPassword,
+                                     String roleName) {
+        String token = getAdminAccessToken();
+
+        // 1) Создаём юзера
+        Map<String,Object> payload = new HashMap<>();
+        payload.put("username",      username);
+        payload.put("email",         email);
+        payload.put("firstName",     firstName);
+        payload.put("lastName",      lastName);
+        payload.put("enabled",       true);
+        payload.put("emailVerified", true);
+        payload.put("credentials", List.of(
+                Map.of("type","password","value", rawPassword,"temporary", false)
+        ));
+
+        ResponseEntity<Void> createResp = webClientBuilder
+                .baseUrl(keycloakUrl + "/admin/realms/" + realm)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .build()
+                .post().uri("/users")
+                .bodyValue(payload)
+                .exchangeToMono(resp -> {
+                    if (resp.statusCode() == HttpStatus.CREATED) {
+                        return resp.toBodilessEntity();
+                    } else {
+                        return resp.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(
+                                        new RuntimeException("Create user error: "
+                                                + resp.statusCode() + " / " + body)));
+                    }
+                })
+                .block();
+
+        // 2) Берём userId из заголовка Location: /admin/realms/.../users/{userId}
+        URI location = createResp.getHeaders().getLocation();
+        String userId = Path.of(location.getPath()).getFileName().toString();
+
+        // 3) Достаём роль по name
+        Map<String,Object> roleObj = webClientBuilder
+                .baseUrl(keycloakUrl + "/admin/realms/" + realm + "/roles")
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .build()
+                .get().uri("/{roleName}", roleName)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String,Object>>(){})
+                .block();
+
+        // 4) Ассайн роле
+        webClientBuilder
+                .baseUrl(keycloakUrl + "/admin/realms/" + realm)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .build()
+                .post().uri("/users/{id}/role-mappings/realm", userId)
+                .bodyValue(List.of(roleObj))
+                .retrieve()
+                .onStatus(s -> !s.is2xxSuccessful(), resp ->
+                        resp.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(
+                                        new RuntimeException("Assign role error: "
+                                                + resp.statusCode() + " / " + body))))
+                .toBodilessEntity()
+                .block();
+    }
+}
