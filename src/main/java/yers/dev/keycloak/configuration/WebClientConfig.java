@@ -1,13 +1,17 @@
-//package yers.dev.keycloak.configuration;// src/main/java/com/ecommerce/userservice/config/WebClientConfig.java
-//
-//import org.springframework.context.annotation.Bean;
-//import org.springframework.context.annotation.Configuration;
-//import org.springframework.web.reactive.function.client.WebClient;
-//
-//@Configuration
-//public class WebClientConfig {
-//    @Bean
-//    public WebClient webClient(WebClient.Builder builder) {
-//        return builder.build();
-//    }
-//}
+package yers.dev.keycloak.configuration;// src/main/java/yers/dev/keycloak/config/WebClientConfig.java
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.reactive.function.client.WebClient;
+
+@Configuration
+public class WebClientConfig {
+    @Bean
+    public WebClient.Builder keycloakWebClientBuilder(KeycloakProperties props) {
+        return WebClient.builder()
+                .baseUrl(props.getAuthServerUrl() + "/realms/" + props.getRealm())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE);
+    }
+}

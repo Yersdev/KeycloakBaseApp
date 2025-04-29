@@ -1,11 +1,14 @@
 package yers.dev.keycloak.service;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -14,14 +17,18 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import yers.dev.keycloak.dto.AuthRequest;
+import yers.dev.keycloak.entity.Users;
+import yers.dev.keycloak.repository.UsersRepository;
 
 import java.util.List;
 import java.util.Map;
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class KeycloakUserService {
 
     private final WebClient.Builder webClientBuilder;
+    private final UsersRepository usersRepository;
 
     @Value("${keycloak.auth-server-url}")
     private String keycloakUrl;
@@ -53,38 +60,66 @@ public class KeycloakUserService {
     }
 
     /** Регистрируем пользователя вместе с именем/фамилией */
+    @Transactional
     public void registerUser(AuthRequest req) {
         String token = getAdminAccessToken();
-
         Map<String,Object> payload = Map.of(
-                "username",       req.getUsername(),
-                "firstName",      req.getFirstName(),
-                "lastName",       req.getLastName(),
-                "email",          req.getEmail(),          // ← теперь обязательно
-                "emailVerified",  true,                    // ← чтобы сразу было верифицировано
-                "enabled",        true,
-                "credentials",    List.of(Map.of(
+                "username",      req.getUsername(),
+                "firstName",     req.getFirstName(),
+                "lastName",      req.getLastName(),
+                "email",         req.getEmail(),
+                "emailVerified", true,
+                "enabled",       true,
+                "credentials", List.of(Map.of(
                         "type",      "password",
                         "value",     req.getPassword(),
                         "temporary", false
                 ))
         );
 
-        webClientBuilder
-                .baseUrl(keycloakUrl + "/admin/realms/" + realm)
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .build()
-                .post().uri("/users")
-                .bodyValue(payload)
-                .retrieve()
-                .onStatus(status -> status != HttpStatus.CREATED, resp ->
-                        resp.bodyToMono(String.class)
-                                .flatMap(body -> Mono.error(new RuntimeException(
-                                        "Create user error: " + resp.statusCode() + " / " + body)))
-                )
-                .toBodilessEntity()
-                .block();
+        try {
+            // вместо retrieve() используем exchangeToMono, чтобы точно обработать статус и тело
+            var response = webClientBuilder
+                    .baseUrl(keycloakUrl + "/admin/realms/" + realm)
+                    .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .build()
+                    .post().uri("/users")
+                    .bodyValue(payload)
+                    .exchangeToMono(clientResponse -> {
+                        if (clientResponse.statusCode().equals(HttpStatus.CREATED)) {
+                            return clientResponse.toBodilessEntity();
+                        } else {
+                            return clientResponse
+                                    .bodyToMono(String.class)
+                                    .flatMap(body -> Mono.error(new RuntimeException(
+                                            "Create user failed: HTTP " +
+                                                    clientResponse.statusCode() +
+                                                    " / body: " + body
+                                    )));
+                        }
+                    })
+                    .block();
+
+            // здесь можно извлечь Location и keycloakId если нужно
+            String location = response.getHeaders().getLocation().toString();
+            String keycloakId = location.substring(location.lastIndexOf('/') + 1);
+
+            // сохраняем в свою БД
+            Users u = new Users();
+            u.setKeycloakId(keycloakId);
+            u.setUsername(req.getUsername());
+            u.setFirstName(req.getFirstName());
+            u.setLastName(req.getLastName());
+            u.setEmail(req.getEmail());
+            usersRepository.save(u);
+
+        } catch (WebClientResponseException e) {
+            // явная логика логирования, чтобы увидеть тело ошибки
+            log.error("Keycloak returned {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw e;  // или бросить своё исключение с более понятным сообщением
+        }
     }
+
 
 }

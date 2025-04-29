@@ -24,17 +24,38 @@ public class KeycloakConfiguration {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // Отключаем CSRF для stateless-token-flow
+                // 1) CSRF: игнорируем консоль H2 и ваши публичные эндпоинты
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/auth/register", "/auth/login", "/auth/refresh", "/auth/logout")
+                        .ignoringRequestMatchers(
+                                "/h2-console/**",
+                                "/auth/register",
+                                "/auth/login",
+                                "/auth/refresh",
+                                "/auth/logout"
+                        )
                 )
-                // Resource Server и OAuth2 Login
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+
+                // 2) Позволяем фреймы для H2
+                .headers(headers -> headers
+                        .frameOptions(frameOptions -> frameOptions.disable()).disable()
+                )
+
+                // 3) Resource Server + OAuth2 Login
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(converter()))
+                )
                 .oauth2Login(Customizer.withDefaults())
-                // Авторизация
+
+                // 4) Раздаём права
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/error", "/auth/register", "/auth/login", "/auth/refresh", "/auth/logout")
-                        .permitAll()
+                        .requestMatchers(
+                                "/h2-console/**",
+                                "/auth/register",
+                                "/auth/login",
+                                "/auth/refresh",
+                                "/auth/logout",
+                                "/error"
+                        ).permitAll()
                         .requestMatchers("/public/manager.html").hasRole("MANAGER")
                         .anyRequest().authenticated()
                 );
