@@ -132,14 +132,6 @@ public class UserController {
             )
     }
     )
-
-    /**
-     * Обновить данные текущего пользователя.
-     *
-     * @param jwt JWT токен с идентификатором пользователя (sub)
-     * @param reqBody новые данные пользователя
-     * @return пустой ответ с кодом 204 No Content
-     */
     @PutMapping("/me")
     public ResponseEntity<HttpStatus> updateMe(
             @AuthenticationPrincipal Jwt jwt,

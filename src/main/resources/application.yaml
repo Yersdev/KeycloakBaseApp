@@ -2,50 +2,46 @@ spring:
   application:
     name: keycloak
 
-  # ————————————————————————————————————————————————
-  # DataSource / JPA
   datasource:
     url: jdbc:h2:mem:mydb
     username: sa
-    password: password
+    password: ${DB_PASSWORD:password}
     driver-class-name: org.h2.Driver
 
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
 
-  # ————————————————————————————————————————————————
-  # H2 Console
   h2:
     console:
-      enabled: true    # включаем консоль
-      path: /h2-console  # (необязательно — это значение и так по-умолчанию)
+      enabled: true
+      path: /h2-console
 
-  # ————————————————————————————————————————————————
-  # OAuth2 / Keycloak
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8080/realms/yers__check
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/yers__check}
       client:
         provider:
           keycloak:
-            issuer-uri: http://localhost:8080/realms/yers__check
+            issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/yers__check}
             user-name-attribute: preferred_username
         registration:
           keycloak:
-            client-id: springsecurity
-            client-secret: jYSlESWbkYzwhGIkld811YCr77Tr1koI
+            client-id: ${KEYCLOAK_CLIENT_ID:springsecurity}
+            client-secret: ${KEYCLOAK_CLIENT_SECRET}
             scope: openid
 
 server:
   port: 8081
 
 keycloak:
-  auth-server-url: http://localhost:8080
-  realm: yers__check
-  client-id: springsecurity
-  client-secret: jYSlESWbkYzwhGIkld811YCr77Tr1koI
+  auth-server-url: ${KEYCLOAK_AUTH_URL:http://localhost:8080}
+  realm: ${KEYCLOAK_REALM:yers__check}
+  client-id: ${KEYCLOAK_CLIENT_ID:springsecurity}
+  client-secret: ${KEYCLOAK_CLIENT_SECRET}
   admin:
-    client-id: springsecurity
-    client-secret: jYSlESWbkYzwhGIkld811YCr77Tr1koI
+    client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:springsecurity}
+    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+    username: ${KEYCLOAK_ADMIN_USERNAME}
+    password: ${KEYCLOAK_ADMIN_PASSWORD}

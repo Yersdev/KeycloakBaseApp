@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,10 +17,16 @@ import yers.dev.keycloak.entity.dto.ErrorResponseDto;
 import yers.dev.keycloak.service.AuthService;
 import yers.dev.keycloak.service.KeycloakUserService;
 import io.swagger.v3.oas.annotations.media.Content;
-
-
 import java.util.Map;
 
+/**
+ * Контроллер для аутентификации пользователей через Keycloak.
+ * Содержит методы регистрации, входа, обновления токена и выхода.
+ */
+@Tag(
+        name = "REST API for check Auth of user",
+        description = "REST APIs to Auth user"
+)
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -110,10 +117,12 @@ public class AuthController {
     )
     @PostMapping("/refresh")
     public ResponseEntity<Map<String,Object>> refresh(@RequestBody Map<String,String> body) {
+        String refreshToken = body.get("refresh_token");
         return ResponseEntity
                 .status(HttpStatusConstants.OK)
-                .body(authService.refresh(body.get("refreshToken")));
+                .body(authService.refreshToken(refreshToken));
     }
+
 
     @Operation(
             summary = "Logout",

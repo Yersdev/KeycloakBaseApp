@@ -8,10 +8,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
 public class WebClientConfig {
-//    @Bean
-//    public WebClient.Builder keycloakWebClientBuilder(KeycloakProperties props) {
-//        return WebClient.builder()
-//                .baseUrl(props.getAuthServerUrl() + "/realms/" + props.getRealm())
-//                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE);
-//    }
+    @Bean
+    public WebClient.Builder keycloakWebClientBuilder(KeycloakProperties props) {
+        return WebClient.builder()
+                .baseUrl(props.getAuthServerUrl() + "/realms/" + props.getRealm())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE);
+    }
 }

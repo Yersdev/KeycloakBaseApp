@@ -17,14 +17,25 @@ import org.springframework.security.web.SecurityFilterChain;
 
 import java.util.stream.Stream;
 
+/**
+ * Конфигурация Spring Security для интеграции с Keycloak.
+ * <p>
+ * Включает поддержку JWT и OIDC авторизации, а также обрабатывает роли из кастомного claim {@code spring_sec_roles}.
+ */
 @Configuration
 public class KeycloakConfiguration {
 
-
+    /**
+     * Основной security filter chain.
+     *
+     * @param http конфигурация {@link HttpSecurity}
+     * @return настроенный {@link SecurityFilterChain}
+     * @throws Exception при ошибке конфигурации
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 1) CSRF: игнорируем консоль H2 и ваши публичные эндпоинты
+                // 1. CSRF выключен для публичных и H2 эндпоинтов
                 .csrf(csrf -> csrf
                         .ignoringRequestMatchers(
                                 "/h2-console/**",
@@ -34,19 +45,16 @@ public class KeycloakConfiguration {
                                 "/auth/logout"
                         )
                 )
-
-                // 2) Позволяем фреймы для H2
+                // 2. Разрешить фреймы (для H2 консоли)
                 .headers(headers -> headers
                         .frameOptions(frameOptions -> frameOptions.disable()).disable()
                 )
-
-                // 3) Resource Server + OAuth2 Login
+                // 3. Настройка JWT + OAuth2 входа
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(converter()))
                 )
                 .oauth2Login(Customizer.withDefaults())
-
-                // 4) Раздаём права
+                // 4. Доступы
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/h2-console/**",
@@ -63,16 +71,24 @@ public class KeycloakConfiguration {
         return http.build();
     }
 
+    /**
+     * Конвертер для преобразования JWT токена в {@link org.springframework.security.core.Authentication}
+     * с учетом пользовательского клейма {@code spring_sec_roles}.
+     *
+     * @return {@link JwtAuthenticationConverter} с кастомной логикой ролей
+     */
     @Bean
     public JwtAuthenticationConverter converter() {
         var converter = new JwtAuthenticationConverter();
         var jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+
         converter.setPrincipalClaimName("preferred_username");
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
             var authorities = jwtGrantedAuthoritiesConverter.convert(jwt);
             var roles = jwt.getClaimAsStringList("spring_sec_roles");
 
-            return Stream.concat(authorities.stream(),
+            return Stream.concat(
+                            authorities.stream(),
                             roles.stream()
                                     .filter(r -> r.startsWith("ROLE_"))
                                     .map(SimpleGrantedAuthority::new)
@@ -82,22 +98,28 @@ public class KeycloakConfiguration {
         return converter;
     }
 
+    /**
+     * Пользовательский {@link OAuth2UserService} для OIDC,
+     * добавляющий роли из {@code spring_sec_roles} в {@link OidcUser}.
+     *
+     * @return модифицированный {@link OAuth2UserService}
+     */
     @Bean
     public OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService() {
         var oidcUserService = new OidcUserService();
-        return userRequest ->
-        {
+
+        return userRequest -> {
             var oidcUser = oidcUserService.loadUser(userRequest);
             var roles = oidcUser.getClaimAsStringList("spring_sec_roles");
-            var authorities = Stream.concat(oidcUser.getAuthorities().stream(),
+            var authorities = Stream.concat(
+                            oidcUser.getAuthorities().stream(),
                             roles.stream()
                                     .filter(r -> r.startsWith("ROLE_"))
                                     .map(SimpleGrantedAuthority::new)
                                     .map(GrantedAuthority.class::cast))
                     .toList();
+
             return new DefaultOidcUser(authorities, oidcUser.getIdToken(), oidcUser.getUserInfo());
         };
-
-
     }
 }

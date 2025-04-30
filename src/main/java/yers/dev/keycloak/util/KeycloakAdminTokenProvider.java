@@ -3,36 +3,73 @@ package yers.dev.keycloak.util;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import yers.dev.keycloak.configuration.KeycloakProperties;
-import yers.dev.keycloak.entity.dto.AdminTokenResponseDto;
-
 import java.util.Map;
 
+/**
+ * Утилитный компонент для получения access token администратора в Keycloak.
+ * Использует Resource Owner Password Credentials Flow для получения токена.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class KeycloakAdminTokenProvider {
+
+    /**
+     * WebClient для выполнения HTTP-запросов к Keycloak.
+     */
     private final WebClient webClient = WebClient.create();
-    private final String adminUsername = "amangeldinersultan200t@gmail.com";
-    private final String adminPassword = "12345dad";
+
+    /**
+     * KeycloakHttpUtil util классов
+     */
+    private final KeycloakHttpUtil httpUtil;
+    /**
+     * Имя пользователя администратора, заданное в application.yml.
+     */
+    @Value("${keycloak.admin.username}")
+    private String adminUsername;
+
+    /**
+     * Пароль администратора, заданный в application.yml.
+     */
+    @Value("${keycloak.admin.password}")
+    private String adminPassword;
+
+    /**
+     * URL сервера Keycloak, например: http://localhost:8080/auth
+     */
     @Value("${keycloak.auth-server-url}")
     private String keycloakUrl;
+
+    /**
+     * Название Realm, в котором осуществляется аутентификация.
+     */
     @Value("${keycloak.realm}")
     private String realm;
+
+    /**
+     * Идентификатор клиента, настроенного в Keycloak для административного доступа.
+     */
     @Value("${keycloak.admin.client-id}")
     private String adminClientId;
+
+    /**
+     * Секрет клиента, настроенного в Keycloak.
+     */
     @Value("${keycloak.admin.client-secret}")
     private String adminClientSecret;
 
-
+    /**
+     * Получает access token администратора из Keycloak.
+     * Этот токен используется для выполнения административных операций
+     * через REST API Keycloak, таких как регистрация или обновление пользователей.
+     *
+     * @return строка access_token
+     */
     public String getAdminAccessToken() {
         MultiValueMap<String,String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "password");
@@ -41,14 +78,13 @@ public class KeycloakAdminTokenProvider {
         form.add("username", adminUsername);
         form.add("password", adminPassword);
 
-         var resp = webClient.post()
-                .uri(keycloakUrl + "/realms/" + realm + "/protocol/openid-connect/token")
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-                .body(BodyInserters.fromFormData(form))
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String,Object>>() {})
-                .block();
+        Map<String, Object> resp = httpUtil.postForm(
+                keycloakUrl + "/realms/" + realm + "/protocol/openid-connect",
+                "/token",
+                form
+        );
 
         return (String) resp.get("access_token");
     }
+
 }

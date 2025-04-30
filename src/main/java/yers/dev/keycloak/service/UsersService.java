@@ -13,11 +13,24 @@ import yers.dev.keycloak.repository.UsersRepository;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Сервис для управления пользователями в локальной базе данных.
+ * Обеспечивает операции получения, регистрации и обновления данных пользователей.
+ */
 @Service
 @AllArgsConstructor
 public class UsersService {
+
+    /**
+     * Репозиторий для работы с сущностями {@link Users}.
+     */
     private final UsersRepository usersRepository;
 
+    /**
+     * Получает список всех пользователей из базы данных.
+     *
+     * @return список пользователей в виде {@link UsersDto}
+     */
     public List<UsersDto> getAll() {
         List<Users> users = usersRepository.findAll();
         List<UsersDto> dtos = new ArrayList<>(users.size());
@@ -27,6 +40,13 @@ public class UsersService {
         return dtos;
     }
 
+    /**
+     * Получает информацию о текущем пользователе по его Keycloak ID.
+     *
+     * @param keycloakId идентификатор пользователя в Keycloak
+     * @return данные пользователя в виде {@link UsersDto}
+     * @throws ResponseStatusException если пользователь не найден
+     */
     public UsersDto getMe(String keycloakId) {
         Users user = usersRepository.findByKeycloakId(keycloakId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -36,7 +56,12 @@ public class UsersService {
         return UsersMapper.toUsersDto(user);
     }
 
-
+    /**
+     * Регистрирует нового пользователя в локальной базе данных.
+     *
+     * @param req        DTO с данными для регистрации
+     * @param keycloakId ID пользователя в Keycloak
+     */
     @Transactional
     public void registerUser(AuthRequest req, String keycloakId) {
         Users u = new Users();
@@ -47,10 +72,15 @@ public class UsersService {
         usersRepository.save(u);
     }
 
+    /**
+     * Обновляет данные пользователя в базе по его Keycloak ID.
+     *
+     * @param req        DTO с обновлёнными данными
+     * @param keycloakId ID пользователя в Keycloak
+     * @throws ResponseStatusException если пользователь не найден
+     */
     @Transactional
     public void updateUser(AuthRequest req , String keycloakId) {
-
-
         Users user = usersRepository.findByKeycloakId(keycloakId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,

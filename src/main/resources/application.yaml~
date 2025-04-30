@@ -1,6 +1,27 @@
 spring:
   application:
     name: keycloak
+
+  # ————————————————————————————————————————————————
+  # DataSource / JPA
+  datasource:
+    url: jdbc:h2:mem:mydb
+    username: sa
+    password: password
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+
+  # ————————————————————————————————————————————————
+  # H2 Console
+  h2:
+    console:
+      enabled: true    # включаем консоль
+      path: /h2-console  # (необязательно — это значение и так по-умолчанию)
+
+  # ————————————————————————————————————————————————
+  # OAuth2 / Keycloak
   security:
     oauth2:
       resourceserver:
@@ -16,28 +37,17 @@ spring:
             client-id: springsecurity
             client-secret: jYSlESWbkYzwhGIkld811YCr77Tr1koI
             scope: openid
-  datasource:
-    url: jdbc:h2:mem:mydb
-    username: sa
-    password: password
-    driverClassName: org.h2.Driver
-  jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
+
 server:
   port: 8081
-  h2:
-    console:
-      enabled: true
 
 keycloak:
   auth-server-url: http://localhost:8080
   realm: yers__check
-
-  # oauth2-login / resource-server client
   client-id: springsecurity
   client-secret: jYSlESWbkYzwhGIkld811YCr77Tr1koI
-
-  # credentials для admin CLI (используется в KeycloakUserService#getAdminAccessToken)
   admin:
     client-id: springsecurity
     client-secret: jYSlESWbkYzwhGIkld811YCr77Tr1koI
+    username: amangeldinersultan200t
+    password: 12345dad

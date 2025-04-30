@@ -26,5 +26,4 @@ public class AdminTokenResponseDto {
     /** Из поля "expires_in" */
     @JsonProperty("expires_in")
     private int expiresIn;
-    // если нужно, можно добавить refreshToken и другие поля...
 }
