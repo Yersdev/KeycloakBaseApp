@@ -1,17 +1,20 @@
 package yers.dev.keycloak.service;
 
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import yers.dev.keycloak.entity.dto.AuthRequest;
+import yers.dev.keycloak.dto.AuthRequest;
 import yers.dev.keycloak.entity.Users;
 import yers.dev.keycloak.entity.dto.UsersDto;
 import yers.dev.keycloak.mapper.UsersMapper;
 import yers.dev.keycloak.repository.UsersRepository;
+
 import java.util.ArrayList;
 import java.util.List;
+
 
 @Service
 @AllArgsConstructor
@@ -60,4 +63,6 @@ public class UsersService {
         user.setEmail(req.getEmail());
         usersRepository.save(user);
     }
+
+
 }

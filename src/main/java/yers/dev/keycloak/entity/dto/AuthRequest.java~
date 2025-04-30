@@ -5,22 +5,26 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 
-@Schema(
-    description = "Users data transfer object",
-    name = "usersDto"
-)
 @Data
-public class UsersDto {
+@Schema(name = "AuthRequest", description = "AuthRequest")
+public class AuthRequest {
 
+    @NotEmpty(message = "password connaot be empty")
+    @Schema(
+            description = "password", example = "123456789"
+    )
+    private String password;
+    @NotEmpty(message = "First name can not be a null or empty")
     @Schema(
             description = "First name", example = "John"
     )
     private String firstName;
-
+    @NotEmpty(message = "Last name can not be a null or empty")
     @Schema(
-            description = "First name", example = "Doe"
+            description = "Last name", example = "Doe"
     )
     private String lastName;
+    @Email(message = "Email is not valid")
     @Schema(
             description = "Email", example = "lY6m6@example.com"
     )

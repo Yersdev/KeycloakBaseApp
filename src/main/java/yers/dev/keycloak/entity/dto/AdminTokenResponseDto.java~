@@ -1,4 +1,4 @@
 package yers.dev.keycloak.entity.dto;
 
-public class UsersDto {
+public class AdminTokenResponseDto {
 }

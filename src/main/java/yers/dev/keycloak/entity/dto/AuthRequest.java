@@ -5,20 +5,20 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 
-@Schema(
-    description = "Users data transfer object",
-    name = "usersDto"
-)
 @Data
-public class UsersDto {
+@Schema(name = "AuthRequest", description = "AuthRequest")
+public class AuthRequest {
 
+    @Schema(
+            description = "password", example = "123456789"
+    )
+    private String password;
     @Schema(
             description = "First name", example = "John"
     )
     private String firstName;
-
     @Schema(
-            description = "First name", example = "Doe"
+            description = "Last name", example = "Doe"
     )
     private String lastName;
     @Schema(

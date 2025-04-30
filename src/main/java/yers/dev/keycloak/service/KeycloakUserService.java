@@ -7,8 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -16,19 +16,23 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
-import yers.dev.keycloak.dto.AuthRequest;
-import yers.dev.keycloak.entity.Users;
-import yers.dev.keycloak.repository.UsersRepository;
+import yers.dev.keycloak.entity.dto.AuthRequest;
+import yers.dev.keycloak.util.KeycloakAdminTokenProvider;
+import yers.dev.keycloak.util.KeycloakRoleProvider;
 
 import java.util.List;
 import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class KeycloakUserService {
 
     private final WebClient.Builder webClientBuilder;
-    private final UsersRepository usersRepository;
+    private final UsersService usersService;
+    private final AuthService authService;
+    private final KeycloakAdminTokenProvider adminTokenProvider;
+    private final KeycloakRoleProvider roleProvider;
 
     @Value("${keycloak.auth-server-url}")
     private String keycloakUrl;
@@ -58,13 +62,10 @@ public class KeycloakUserService {
 
         return (String) resp.get("access_token");
     }
-
-    /** Регистрируем пользователя вместе с именем/фамилией */
     @Transactional
-    public void registerUser(AuthRequest req) {
+    public Map<String,Object> registerUser(AuthRequest req) {
         String token = getAdminAccessToken();
         Map<String,Object> payload = Map.of(
-                "username",      req.getUsername(),
                 "firstName",     req.getFirstName(),
                 "lastName",      req.getLastName(),
                 "email",         req.getEmail(),
@@ -105,21 +106,52 @@ public class KeycloakUserService {
             String location = response.getHeaders().getLocation().toString();
             String keycloakId = location.substring(location.lastIndexOf('/') + 1);
 
-            // сохраняем в свою БД
-            Users u = new Users();
-            u.setKeycloakId(keycloakId);
-            u.setUsername(req.getUsername());
-            u.setFirstName(req.getFirstName());
-            u.setLastName(req.getLastName());
-            u.setEmail(req.getEmail());
-            usersRepository.save(u);
+            usersService.registerUser(req, keycloakId);
+
 
         } catch (WebClientResponseException e) {
             // явная логика логирования, чтобы увидеть тело ошибки
             log.error("Keycloak returned {}: {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw e;  // или бросить своё исключение с более понятным сообщением
         }
+
+        Map<String,Object> resp = authService.login(req);
+        return resp;
     }
 
 
+
+
+
+    @Transactional
+    public void updateUser(String keycloakId, AuthRequest req) {
+        String token = getAdminAccessToken();
+
+        // 1) PUT в Keycloak
+        Map<String, Object> payload = Map.of(
+                "firstName", req.getFirstName(),
+                "lastName", req.getLastName(),
+                "email", req.getEmail(),
+                "emailVerified", true
+        );
+
+        webClientBuilder
+                .baseUrl(keycloakUrl + "/admin/realms/" + realm)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build()
+                .put().uri("/users/{id}", keycloakId)
+                .bodyValue(payload)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, resp ->
+                        resp.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException(
+                                        "Keycloak update failed: " + resp.statusCode() + " / " + body
+                                )))
+                )
+                .toBodilessEntity()
+                .block();
+
+        usersService.updateUser(req, keycloakId);
+    }
 }

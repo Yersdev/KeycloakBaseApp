@@ -33,15 +33,16 @@ import java.util.stream.Stream;
                 contact = @Contact(
                         name = "Yersultan Amangeldin",
                         email = "yersultanamangedlindev@gmail.com",
-                        url = "https://github.com/Yersdev"
+                        url = "https://www.eazybytes.com"
                 ),
                 license = @License(
                         name = "Apache 2.0",
-                        url = "https://github.com/Yersdev"
+                        url = "https://www.eazybytes.com"
                 )
         ),
         externalDocs = @ExternalDocumentation(
-                description =  "KeyCloak Application Documentation"
+                description =  "EazyBank Accounts microservice REST API Documentation",
+                url = "https://www.eazybytes.com/swagger-ui.html"
         )
 )
 public class KeycloakApplication {

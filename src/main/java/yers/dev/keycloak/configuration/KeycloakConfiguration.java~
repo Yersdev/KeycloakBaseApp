@@ -1,5 +1,6 @@
 package yers.dev.keycloak.configuration;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -11,20 +12,26 @@ import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Configuration
+@Slf4j
 public class KeycloakConfiguration {
-
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                // 1) CSRF: игнорируем консоль H2 и ваши публичные эндпоинты
+                // Игнорируем CSRF на публичных эндпоинтах
                 .csrf(csrf -> csrf
                         .ignoringRequestMatchers(
                                 "/h2-console/**",
@@ -34,20 +41,18 @@ public class KeycloakConfiguration {
                                 "/auth/logout"
                         )
                 )
+                // Для H2 консоли
+                .headers(headers -> headers.frameOptions( frame -> frame.disable()).disable())
 
-                // 2) Позволяем фреймы для H2
-                .headers(headers -> headers
-                        .frameOptions(frameOptions -> frameOptions.sameOrigin()).disable()
-                )
-
-                // 3) Resource Server + OAuth2 Login
+                // Настраиваем Resource Server + OAuth2 Login
                 .oauth2ResourceServer(oauth2 -> oauth2
-                        .jwt(jwt -> jwt.jwtAuthenticationConverter(converter()))
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 )
                 .oauth2Login(Customizer.withDefaults())
 
-                // 4) Раздаём права
+                // Правила доступа
                 .authorizeHttpRequests(auth -> auth
+                        // публичные
                         .requestMatchers(
                                 "/h2-console/**",
                                 "/auth/register",
@@ -56,48 +61,73 @@ public class KeycloakConfiguration {
                                 "/auth/logout",
                                 "/error"
                         ).permitAll()
+                        // Swagger UI и OpenAPI-доки — только ADMIN
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui.html"
+                        ).hasRole("ADMIN")
+                        // менеджерская страница — только MANAGER
                         .requestMatchers("/public/manager.html").hasRole("MANAGER")
+                        // остальные — аутентифицированные
                         .anyRequest().authenticated()
                 );
 
         return http.build();
     }
 
+    /**
+     * Конвертер, который берёт роли из стандартного поля realm_access.roles
+     * и добавляет префикс ROLE_ для Spring Security.
+     * При необходимости можно дополнять кастомными ролями из других полей.
+     */
     @Bean
-    public JwtAuthenticationConverter converter() {
-        var converter = new JwtAuthenticationConverter();
-        var jwtGrantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        converter.setPrincipalClaimName("preferred_username");
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
-            var authorities = jwtGrantedAuthoritiesConverter.convert(jwt);
-            var roles = jwt.getClaimAsStringList("spring_sec_roles");
+            // 1) берем стандартные authorities (scopes)
+            var scopesConverter = new JwtGrantedAuthoritiesConverter();
+            List<GrantedAuthority> authorities = new ArrayList<>(scopesConverter.convert(jwt));
 
-            return Stream.concat(authorities.stream(),
-                            roles.stream()
-                                    .filter(r -> r.startsWith("ROLE_"))
-                                    .map(SimpleGrantedAuthority::new)
-                                    .map(GrantedAuthority.class::cast))
-                    .toList();
+            // 2) достаём realm_access.roles из вложенного Map
+            @SuppressWarnings("unchecked")
+            Map<String, Object> realmAccess = jwt.getClaim("realm_access");
+            if (realmAccess != null && realmAccess.containsKey("roles")) {
+                @SuppressWarnings("unchecked")
+                List<String> realmRoles = (List<String>) realmAccess.get("roles");
+                for (String role : realmRoles) {
+                    // Spring потребует HasRole("X") — а мы даём ему SimpleGrantedAuthority("ROLE_X")
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+                }
+            }
+
+            return authorities;
         });
         return converter;
     }
 
+
+
+    /**
+     * Аналогично можно расширить OAuth2Login, чтобы UI-пользователь (через OIDC) тоже имел эти роли.
+     */
     @Bean
     public OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService() {
-        var oidcUserService = new OidcUserService();
-        return userRequest ->
-        {
-            var oidcUser = oidcUserService.loadUser(userRequest);
-            var roles = oidcUser.getClaimAsStringList("spring_sec_roles");
-            var authorities = Stream.concat(oidcUser.getAuthorities().stream(),
-                            roles.stream()
-                                    .filter(r -> r.startsWith("ROLE_"))
-                                    .map(SimpleGrantedAuthority::new)
-                                    .map(GrantedAuthority.class::cast))
-                    .toList();
-            return new DefaultOidcUser(authorities, oidcUser.getIdToken(), oidcUser.getUserInfo());
+        var delegate = new OidcUserService();
+        return request -> {
+            OidcUser oidc = delegate.loadUser(request);
+
+            // вытягиваем те же роли из токена
+            List<String> extra = oidc.getClaimAsStringList("spring_sec_roles");
+            var authorities = Stream.concat(
+                    oidc.getAuthorities().stream(),
+                    extra == null ? Stream.<GrantedAuthority>empty()
+                            : extra.stream()
+                            .filter(r -> r.startsWith("ROLE_"))
+                            .map(SimpleGrantedAuthority::new)
+            ).collect(Collectors.toList());
+
+            return new DefaultOidcUser(authorities, oidc.getIdToken(), oidc.getUserInfo());
         };
-
-
     }
 }

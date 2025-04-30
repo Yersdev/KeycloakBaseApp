@@ -1,6 +1,5 @@
 package yers.dev.keycloak.service;
 
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -11,6 +10,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
+import yers.dev.keycloak.entity.dto.AuthRequest;
 
 import java.util.Map;
 
@@ -39,13 +39,13 @@ public class AuthService {
     /**
      * Логин пользователя: password grant
      */
-    public Map<String,Object> login(String username, String password) {
+    public Map<String,Object> login(AuthRequest request) {
         MultiValueMap<String,String> form = new LinkedMultiValueMap<>();
         form.add("grant_type", "password");
         form.add("client_id", clientId);
         form.add("client_secret", clientSecret);
-        form.add("username", username);
-        form.add("password", password);
+        form.add("username", request.getEmail());
+        form.add("password", request.getPassword());
 
         return webClient.post()
                 .uri(keycloakUrl + "/realms/" + realm + "/protocol/openid-connect/token")
@@ -56,25 +56,6 @@ public class AuthService {
                 .block();
     }
 
-
-    public Map<String,Object> refreshToken(String refreshToken) {
-        MultiValueMap<String,String> form = new LinkedMultiValueMap<>();
-        form.add("grant_type", "refresh_token");
-        form.add("client_id",  clientId);
-        form.add("client_secret", clientSecret);
-        form.add("refresh_token", refreshToken);
-
-        return webClientBuilder
-                .baseUrl(keycloakUrl + "/realms/" + realm + "/protocol/openid-connect")
-                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-                .build()
-                .post()
-                .uri("/token")
-                .body(BodyInserters.fromFormData(form))
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String,Object>>() {})
-                .block();
-    }
 
     /**
      * Обновление токена по refresh_token
