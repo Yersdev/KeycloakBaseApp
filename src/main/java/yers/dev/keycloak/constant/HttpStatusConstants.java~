@@ -1,7 +1,0 @@
-package yers.dev.keycloak.constant;
-
-public class HttpStatusConstants {
-    public static final int USER_REGISTERED = 201;
-    public static final int OK = 200;
-    public static final int USER_LOGGED_IN = 200;
-}
