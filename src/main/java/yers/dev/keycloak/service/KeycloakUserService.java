@@ -4,9 +4,15 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
 import yers.dev.keycloak.entity.dto.AuthRequest;
 import yers.dev.keycloak.util.KeycloakHttpUtil;
 import java.util.List;
@@ -19,6 +25,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class KeycloakUserService {
+
+    private final WebClient.Builder webClientBuilder;
 
     /**
      * Утилита для HTTP-запросов к Keycloak.
@@ -90,23 +98,16 @@ public class KeycloakUserService {
                 ))
         );
 
-        try {
-            keycloakHttpUtil.postJson(
-                    keycloakUrl + "/admin/realms/" + realm,
-                    "/users",
-                    token,
-                    payload
-            );
-        } catch (Exception e) {
-            log.error("Error during registration: {}", e.getMessage(), e);
-            throw e;
-        }
+        // Используем новый метод для регистрации пользователя
+        String keycloakId = keycloakHttpUtil.registerUser(keycloakUrl + "/admin/realms/" + realm, token, payload);
 
-        // TODO: Получить keycloakId из Location и заменить плейсхолдер
-        usersService.registerUser(req, "keycloak-id-placeholder");
+        // Дальше можно продолжить регистрацию в вашей системе
+        usersService.registerUser(req, keycloakId);
 
         return authService.login(req);
     }
+
+
 
     /**
      * Обновляет данные пользователя в Keycloak и локальной базе.

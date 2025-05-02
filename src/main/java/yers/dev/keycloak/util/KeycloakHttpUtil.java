@@ -3,6 +3,7 @@ package yers.dev.keycloak.util;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MultiValueMap;
@@ -114,5 +115,42 @@ public class KeycloakHttpUtil {
                 )
                 .toBodilessEntity()
                 .block();
+    }
+
+    /**
+     * Регистрация пользователя в Keycloak.
+     *
+     * @param baseUrl базовый URL для Keycloak
+     * @param token   Bearer-токен для авторизации
+     * @param payload Тело запроса с данными пользователя
+     * @return ID пользователя, если успешно
+     */
+    public String registerUser(String baseUrl, String token, Map<String, Object> payload) {
+        // Выполняем запрос на создание пользователя
+        var response = webClientBuilder
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .build()
+                .post().uri("/users")
+                .bodyValue(payload)
+                .exchangeToMono(clientResponse -> {
+                    if (clientResponse.statusCode().equals(HttpStatus.CREATED)) {
+                        return clientResponse.toBodilessEntity();
+                    } else {
+                        return clientResponse
+                                .bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException(
+                                        "Create user failed: HTTP " +
+                                                clientResponse.statusCode() +
+                                                " / body: " + body
+                                )));
+                    }
+                })
+                .block();
+
+        // Извлекаем ID пользователя из Location заголовка
+        String location = response.getHeaders().getLocation().toString();
+        return location.substring(location.lastIndexOf('/') + 1); // извлекаем ID
     }
 }
